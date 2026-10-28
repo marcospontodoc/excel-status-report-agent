@@ -1,0 +1,110 @@
+# Contrato canônico do workbook fixo de Status Report QA.
+schema_version: 2
+model_name: qa_status_report_fixed_workbook
+input_policy:
+  workbook_structure: fixed_template
+  template_path: inputs/templates/qa_status_report_template.xlsx
+  fixed_sheet_names: true
+  fixed_column_names: true
+  supported_formats: [.xlsx, .xlsm]
+  source_of_truth: user_workbook
+  fake_example_path: inputs/examples/qa_status_report_fake_example.xlsx
+  fake_example_is_production_data: false
+formula_policy:
+  recalculate: false
+  use_cached_values_with_limitation: true
+  missing_cache_for_required_field: block
+  missing_cache_for_optional_field: unavailable
+provenance:
+  required_for_mapped_values: true
+  location_fields: [workbook, sheet, column, row, coordinate]
+  derived_values_must_retain_input_references: true
+validation:
+  deterministic_structural_checks: true
+  required_sheets: [Projeto, Funcionalidades, Cenários, Bugs]
+  duplicate_ids_are_invalid: true
+  fully_empty_data_rows_are_ignored: true
+  partially_filled_data_rows_are_validated: true
+  broken_references_are_invalid: true
+  missing_values_are_not: [zero, success, no_defects]
+  empty_scenario_status_interpretation: Em Andamento
+  invalid_status_blocks_complete_status_distribution: true
+  empty_bug_sheet_count: 0
+entities:
+  project:
+    source_sheet: Projeto
+    fields:
+      name: {source_column: Nome do Projeto, type: text, required: true}
+      reference_period_start: {source_column: Início do Período, type: date, required: true}
+      reference_period_end: {source_column: Fim do Período, type: date, required: true}
+  functionality:
+    source_sheet: Funcionalidades
+    fields:
+      id: {source_column: ID da Funcionalidade, type: identifier, required: true, unique: true}
+      name: {source_column: Nome da Funcionalidade, type: text, required: true}
+      status: {type: derived, required_for: slide_3}
+      progress: {type: percentage, range: [0, 100], required_for: slide_3}
+      bug_count: {type: distinct_bug_count, required_for: slide_3}
+      observation: {type: scenario_observation_summary, required_for: slide_3}
+  test_scenario:
+    source_sheet: Cenários
+    fields:
+      functionality_id: {source_column: ID da Funcionalidade, type: reference, target: functionality, required: true}
+      id: {source_column: ID do Cenário, type: identifier, required: true, unique: true}
+      description: {source_column: Descrição do Cenário, type: text, required: true}
+      prerequisites: {source_column: Pré-requisitos, type: text, required: false}
+      steps: {source_column: Passo a Passo, type: text, required: false}
+      status_raw: {source_column: Status, type: enum, required: false, empty_means: Em Andamento, allowed: [Falha, Ignorado, Bloqueado, Em Andamento, Aprovado]}
+      responsible: {source_column: Responsável, type: text, required: false}
+      observations: {source_column: Observações, type: text, required: false}
+  bug:
+    source_sheet: Bugs
+    fields:
+      id: {source_column: ID do Bug, type: identifier, required: true, unique: true}
+      functionality_id: {source_column: ID da Funcionalidade, type: reference, target: functionality, required: true}
+      scenario_id: {source_column: ID do Cenário, type: reference, target: test_scenario, required: true}
+      description: {source_column: Descrição do Bug, type: text, required: true}
+      status_raw: {source_column: Status, type: text, required: true}
+      severity_raw: {source_column: Severidade, type: text, required: true}
+      responsible: {source_column: Responsável, type: text, required: true}
+      opened_at: {source_column: Data de Abertura, type: date, required: true}
+metric_rules:
+  planned_scenario_total:
+    definition: count_of_valid_scenario_records
+    shown_as: adjacent_total_not_pie_slice
+  scenario_status_distribution:
+    population: all_valid_scenario_records
+    categories: [Falha, Ignorado, Bloqueado, Em Andamento, Aprovado]
+    include_ignored: true
+    blank_status_as: Em Andamento
+  functionality_progress:
+    numerator_statuses: [Aprovado, Falha]
+    denominator_statuses: [Falha, Bloqueado, Em Andamento, Aprovado]
+    ignored_excluded: true
+    zero_denominator: unavailable
+  functionality_status_precedence:
+    - Falha_if_any
+    - Bloqueado_if_any_and_no_Falha
+    - Em_Andamento_if_any_in_progress_or_blank_and_no_higher_precedence
+    - Aprovado_if_all_applicable_approved
+    - Ignorado_if_all_ignored
+  functionality_bug_count:
+    count_distinct: bug.id
+    relationship_source: explicit_functionality_id_and_scenario_id
+    empty_bug_sheet_count: 0
+  functionality_observation:
+    source: nonempty_test_scenario.observations
+    group_by: test_scenario.functionality_id
+    synthesis_method: deterministic_grouping_by_scenario_id
+    rewrite_source_text: false
+    ai_required: false
+    provenance_required: true
+
+
+
+
+
+
+
+
+
